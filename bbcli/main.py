@@ -399,7 +399,7 @@ def schedule_setup():
 @report_app.command("html")
 def report_html(ndjson: str = typer.Argument(...),
                 output: Optional[str] = typer.Option(None,"--output","-o"),
-                open_:  bool = typer.Option(False,"--open")):
+                open_:  bool = typer.Option(False,"--open/--no-open")):
     """📄 Generate HTML report from NDJSON."""
     rpt = reporter.generate_html(ndjson, output)
     if open_: import subprocess; subprocess.run(["open", rpt])
@@ -407,14 +407,14 @@ def report_html(ndjson: str = typer.Argument(...),
 @report_app.command("pdf")
 def report_pdf(ndjson: str = typer.Argument(...),
                output: Optional[str] = typer.Option(None,"--output","-o"),
-               open_:  bool = typer.Option(False,"--open")):
+               open_:  bool = typer.Option(False,"--open/--no-open")):
     """📄 Generate PDF report from NDJSON."""
     rpt = reporter.generate_pdf(ndjson, output)
     if open_: import subprocess; subprocess.run(["open", rpt])
 
 @report_app.command("last")
 def report_last(fmt: str = typer.Option("html","--format","-f"),
-                open_: bool = typer.Option(True,"--open")):
+                open_: bool = typer.Option(False,"--open/--no-open",help="Open report after generating")):
     """📄 Generate report from the most recent scan."""
     last = history.get_last_scan()
     if not last: console.print("[danger]No scan history.[/danger]"); raise typer.Exit(1)
@@ -611,7 +611,7 @@ def sbom(
     fmt:    str           = typer.Option("spdx", "--format", "-f",
                 help="Output format: spdx | cyclonedx"),
     output: Optional[str] = typer.Option(None, "--output", "-o"),
-    open_:  bool          = typer.Option(False, "--open"),
+    open_:  bool          = typer.Option(False, "--open/--no-open"),
 ):
     """Export a Software Bill of Materials (SBOM) from a scan.
 
