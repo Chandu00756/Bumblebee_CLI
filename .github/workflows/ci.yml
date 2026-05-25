@@ -1,0 +1,16 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -e . pytest pytest-cov
+      - name: Run tests
+        run: pytest tests/ -v --tb=short --cov=bbcli --cov-report=term-missing
+      - name: Check install
+        run: bee version
