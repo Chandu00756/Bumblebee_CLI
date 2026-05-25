@@ -10,6 +10,7 @@ from rich import box
 from bbcli.theme import console, BANNER, MINI_BANNER
 from bbcli import installer, scanner, scheduler, reporter, history, catalog
 from bbcli import differ, sbom as sbom_mod, lockfile, fixer, watcher
+from bbcli import scorer, policy as policy_mod, exporter, trend, ignorer
 from bbcli.interactive import run_interactive
 
 app          = typer.Typer(name="bee", add_completion=True,
@@ -19,10 +20,12 @@ schedule_app = typer.Typer(help="Manage scheduled scans via macOS launchd")
 catalog_app  = typer.Typer(help="Manage exposure catalogs")
 history_app  = typer.Typer(help="View scan history")
 report_app   = typer.Typer(help="Generate HTML / PDF reports")
+ignore_app   = typer.Typer(help="Manage .beeignore suppression rules")
 app.add_typer(schedule_app, name="schedule")
 app.add_typer(catalog_app,  name="catalog")
 app.add_typer(history_app,  name="history")
 app.add_typer(report_app,   name="report")
+app.add_typer(ignore_app,   name="ignore")
 
 def _repl() -> None:
     """
@@ -98,6 +101,13 @@ def _repl() -> None:
                 ("catalog list-intel",               "Show available threat intel sources"),
                 ("history",                          "Show scan history"),
                 ("history clear",                    "Clear scan history"),
+                ("score [FILE.ndjson]",               "Security score A–F dashboard"),
+                ("policy [FILE.ndjson]",              "Enforce .bee-policy.yml rules"),
+                ("export [FILE.ndjson] --format",     "Export SARIF / CSV / JSON"),
+                ("trend",                             "Show findings trend over time"),
+                ("ignore list",                       "List .beeignore rules"),
+                ("ignore add RULE",                   "Add a suppress rule"),
+                ("ignore remove RULE",                "Remove a suppress rule"),
                 ("exit",                             "Quit the shell"),
             ]
             for cmd, desc in rows:
@@ -688,6 +698,172 @@ def fix(
             raise typer.Exit(1)
         src = last["output_file"]
     fixer.generate_fixes(src, apply=apply)
+
+# ── score ────────────────────────────────────────────────────────────────────
+
+@app.command()
+def score(
+    ndjson: Optional[str] = typer.Argument(None,
+                help="NDJSON scan file. Omit to use the most recent scan."),
+):
+    """Security score dashboard — grade A–F based on findings severity.
+
+    Calculates a 0-100 score: Critical=-25, High=-15, Medium=-7, Low=-2.
+    """
+    console.print(MINI_BANNER)
+    src = ndjson
+    if not src:
+        last = history.get_last_scan()
+        if not last:
+            console.print("[danger]No scan history. Run a scan first.[/danger]")
+            raise typer.Exit(1)
+        src = last["output_file"]
+    scorer.show_score(src)
+
+
+# ── policy ────────────────────────────────────────────────────────────────────
+
+@app.command()
+def policy(
+    ndjson:      Optional[str] = typer.Argument(None,
+                    help="NDJSON scan file. Omit to use the most recent scan."),
+    policy_file: Optional[str] = typer.Option(None, "--policy", "-p",
+                    help="Path to .bee-policy.yml (auto-discovered if omitted)"),
+):
+    """Enforce policy-as-code rules from .bee-policy.yml.
+
+    Auto-discovers .bee-policy.yml in cwd or ~/.bumblebee-cli/policy.yml.
+    Exits non-zero if any rule is violated.
+
+    Example policy file:
+
+      max_severity: high
+      max_findings: 5
+      block_packages:
+        - left-pad
+    """
+    src = ndjson
+    if not src:
+        last = history.get_last_scan()
+        if not last:
+            console.print("[danger]No scan history. Run a scan first.[/danger]")
+            raise typer.Exit(1)
+        src = last["output_file"]
+    exit_code = policy_mod.enforce_policy(src, policy_file)
+    raise typer.Exit(exit_code)
+
+
+# ── export ────────────────────────────────────────────────────────────────────
+
+@app.command()
+def export(
+    ndjson:  Optional[str] = typer.Argument(None,
+                 help="NDJSON scan file. Omit to use the most recent scan."),
+    fmt:     str           = typer.Option("all", "--format", "-f",
+                 help="Output format: sarif | csv | json | all"),
+    output:  Optional[str] = typer.Option(None, "--output", "-o",
+                 help="Output file path (auto-named if omitted)"),
+):
+    """Export findings to SARIF, CSV, or JSON.
+
+    SARIF integrates with GitHub Advanced Security and VS Code.
+
+    Examples:
+      bee export                         # all formats from last scan
+      bee export scan.ndjson --format sarif
+      bee export scan.ndjson --format csv --output findings.csv
+    """
+    console.print(MINI_BANNER)
+    src = ndjson
+    if not src:
+        last = history.get_last_scan()
+        if not last:
+            console.print("[danger]No scan history. Run a scan first.[/danger]")
+            raise typer.Exit(1)
+        src = last["output_file"]
+    fmt = fmt.lower()
+    if fmt == "sarif":
+        exporter.export_sarif(src, output)
+    elif fmt == "csv":
+        exporter.export_csv(src, output)
+    elif fmt == "json":
+        exporter.export_json(src, output)
+    elif fmt == "all":
+        exporter.export_all(src, output)
+    else:
+        console.print(f"[danger]Unknown format:[/danger] {fmt}  (use sarif|csv|json|all)")
+        raise typer.Exit(1)
+
+
+# ── trend ─────────────────────────────────────────────────────────────────────
+
+@app.command()
+def show_trend(
+    limit: int = typer.Option(10, "--limit", "-n",
+                help="Number of recent scans to show"),
+):
+    """Show findings trend over time from scan history.
+
+    Displays a table + sparkline chart of findings per scan.
+    Use bee scan repeatedly over time to see trends develop.
+    """
+    trend.show_trend(limit)
+
+
+# ── ignore sub-commands ───────────────────────────────────────────────────────
+
+@ignore_app.command("list")
+def ignore_list(
+    root: Optional[str] = typer.Argument(None,
+                help="Project root containing .beeignore (default: cwd)"),
+):
+    """List all .beeignore suppression rules."""
+    ignorer.list_rules(root)
+
+
+@ignore_app.command("add")
+def ignore_add(
+    rule: str           = typer.Argument(...,
+                help="Rule to add: package, package@version, or ecosystem:package"),
+    root: Optional[str] = typer.Option(None, "--root",
+                help="Project root (default: cwd)"),
+):
+    """Add a suppression rule to .beeignore.
+
+    Examples:
+      bee ignore add requests
+      bee ignore add lodash@4.17.20
+      bee ignore add npm:axios
+      bee ignore add pypi:urllib3@1.26.0
+    """
+    ignorer.add_rule(rule, root)
+
+
+@ignore_app.command("remove")
+def ignore_remove(
+    rule: str           = typer.Argument(...,
+                help="Rule to remove"),
+    root: Optional[str] = typer.Option(None, "--root",
+                help="Project root (default: cwd)"),
+):
+    """Remove a suppression rule from .beeignore."""
+    ignorer.remove_rule(rule, root)
+
+
+@ignore_app.command("clear")
+def ignore_clear(
+    root: Optional[str] = typer.Argument(None,
+                help="Project root (default: cwd)"),
+    yes:  bool          = typer.Option(False, "--yes", "-y",
+                help="Skip confirmation"),
+):
+    """Remove all rules from .beeignore."""
+    if not yes:
+        confirm = typer.confirm("Clear ALL .beeignore rules?")
+        if not confirm:
+            raise typer.Exit(0)
+    ignorer.clear_rules(root)
+
 
 if __name__ == "__main__":
     app()
