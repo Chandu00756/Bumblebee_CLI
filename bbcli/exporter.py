@@ -157,8 +157,6 @@ def export_json(ndjson_path: str, output: str | None = None) -> str:
 
 def export_all(ndjson_path: str, output_dir: str | None = None) -> None:
     """Export to all three formats at once."""
-    from bbcli import __version__
-    console.print(f"[primary]🐝 Bumblebee CLI[/primary] [muted]v{__version__} — Dependency security scanner for macOS[/muted]")
     console.print(f"  [muted]Exporting:[/muted] [accent]{Path(ndjson_path).name}[/accent]\n")
 
     base = Path(output_dir) if output_dir else _REPORTS_DIR

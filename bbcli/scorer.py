@@ -71,9 +71,6 @@ def compute_score(ndjson_path: str) -> dict:
 
 def show_score(ndjson_path: str) -> None:
     """Print a rich security score dashboard."""
-    from bbcli import __version__
-    console.print(f"[primary]🐝 Bumblebee CLI[/primary] [muted]v{__version__} — Dependency security scanner for macOS[/muted]")
-
     result = compute_score(ndjson_path)
     score  = result["score"]
     grade  = result["grade"]

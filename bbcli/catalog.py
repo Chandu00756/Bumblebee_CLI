@@ -2,7 +2,7 @@
 import json
 import requests
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from rich.table import Table
 from rich.panel import Panel
 from rich import box
@@ -24,7 +24,7 @@ def create_catalog(name, entries):
     _ensure_dir()
     catalog = {
         "schema_version": "0.1.0",
-        "created_at": datetime.utcnow().isoformat() + "Z",
+        "created_at": datetime.now(timezone.utc).isoformat() + "Z",
         "name": name,
         "entries": entries,
     }

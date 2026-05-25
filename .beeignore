@@ -1,0 +1,8 @@
+# .beeignore — Bumblebee CLI suppress list
+# Format (one rule per line):
+#   package               — suppress any version of this package
+#   package@version       — suppress exact version
+#   ecosystem:package     — suppress across one ecosystem
+#   ecosystem:package@ver — suppress exact version in ecosystem
+#   # comment lines are ignored
+

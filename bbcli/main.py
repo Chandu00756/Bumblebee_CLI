@@ -128,8 +128,16 @@ def _repl() -> None:
 
 
 @app.callback(invoke_without_command=True)
-def main(ctx: typer.Context):
+def main(
+    ctx: typer.Context,
+    ver: bool = typer.Option(False, "--version", "-V", is_eager=True,
+                             help="Show version and exit."),
+):
     """🐝 No arguments? Opens the interactive REPL shell."""
+    if ver:
+        from bbcli import __version__
+        console.print(f"[primary]🐝 Bumblebee CLI[/primary] [accent]v{__version__}[/accent]")
+        raise typer.Exit()
     if ctx.invoked_subcommand is None:
         _repl()
 
@@ -797,7 +805,7 @@ def export(
 
 # ── trend ─────────────────────────────────────────────────────────────────────
 
-@app.command()
+@app.command("trend")
 def show_trend(
     limit: int = typer.Option(10, "--limit", "-n",
                 help="Number of recent scans to show"),

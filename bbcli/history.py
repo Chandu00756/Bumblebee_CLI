@@ -1,7 +1,7 @@
 """Track scan run metadata in ~/.bumblebee-cli/history.json"""
 import json
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from rich.table import Table
 from rich import box
 from bbcli.theme import console
@@ -24,7 +24,7 @@ def add_entry(profile, output_file, summary, findings_count):
     records = _load()
     records.append({
         "id":               len(records) + 1,
-        "timestamp":        datetime.utcnow().isoformat() + "Z",
+        "timestamp":        datetime.now(timezone.utc).isoformat() + "Z",
         "profile":          profile,
         "output_file":      output_file,
         "files_considered": summary.get("files_considered", 0),

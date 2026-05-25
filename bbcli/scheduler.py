@@ -305,8 +305,8 @@ def show_schedules() -> None:
     t.add_column("Name",   style="bold white")
     t.add_column("When",   style="info")
     t.add_column("Loaded", justify="center")
-    t.add_column("Plist",  style="muted", no_wrap=True)
-    t.add_column("Log",    style="muted", no_wrap=True)
+    t.add_column("Plist",  style="muted")
+    t.add_column("Log",    style="muted")
 
     for s in schedules:
         loaded_cell = "[success]●[/success]" if s["loaded"] else "[danger]○[/danger]"

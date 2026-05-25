@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -367,7 +367,7 @@ def generate_html(ndjson_path: str, output: Optional[str] = None) -> str:
     diagnostics = data["diagnostics"]
     ecosystems  = data["ecosystems"]
     summary     = data["summary"]
-    generated   = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    generated   = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     src_name    = Path(ndjson_path).name
 
     fi_cnt   = len(findings)
@@ -594,7 +594,7 @@ def generate_pdf(ndjson_path: str, output: Optional[str] = None) -> str:
     diagnostics = data["diagnostics"]
     ecosystems  = data["ecosystems"]
     summary     = data["summary"]
-    generated   = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    generated   = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     src_name    = Path(ndjson_path).name
 
     pdf = BumblebeePDF()
