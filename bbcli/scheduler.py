@@ -440,6 +440,91 @@ def show_logs(name: str, lines: int = 50) -> None:
     ))
 
 
+def stop_schedule(name: str) -> bool:
+    """Stop a currently-running scan job without removing the schedule."""
+    if not IS_MACOS:
+        console.print("[warning]⚠ stop is only available on macOS.[/warning]")
+        return False
+
+    lbl   = _label(name)
+    plist = _plist_path(name)
+
+    if not plist.exists():
+        console.print(f"[danger]❌ Schedule '{name}' not found.[/danger]")
+        return False
+
+    res = subprocess.run(["launchctl", "stop", lbl], capture_output=True, text=True)
+    if res.returncode == 0:
+        console.print(f"[success]✅ Schedule '{name}' stopped (schedule remains active).[/success]")
+        return True
+
+    # launchctl stop returns non-zero if the job is not currently running — not an error
+    msg = res.stderr.strip() or "Job is not currently running."
+    console.print(f"[warning]⚠ {msg}[/warning]")
+    return False
+
+
+# ── log retention presets ─────────────────────────────────────────────────────
+_OLDER_THAN_DAYS: dict[str, int] = {
+    "1w":  7,
+    "2w":  14,
+    "1m":  30,
+    "2m":  60,
+    "3m":  90,
+    "6m":  180,
+    "all": 0,   # 0 means delete unconditionally
+}
+
+
+def delete_logs(name: Optional[str], older_than: str = "all") -> None:
+    """
+    Delete log files for one schedule (or all schedules if name is omitted).
+
+    --older-than accepts: 1w | 2w | 1m | 2m | 3m | 6m | all
+    Files are only deleted when their last-modified time exceeds the threshold.
+    'all' deletes regardless of age.
+    """
+    key = older_than.lower().strip()
+    if key not in _OLDER_THAN_DAYS:
+        console.print(
+            f"[danger]❌ Invalid --older-than value '{older_than}'. "
+            f"Valid: {', '.join(_OLDER_THAN_DAYS)}[/danger]"
+        )
+        return
+
+    days   = _OLDER_THAN_DAYS[key]
+    cutoff = (datetime.now().timestamp() - days * 86400) if days > 0 else None
+
+    targets: list[str] = []
+    if name:
+        targets = [name]
+    else:
+        targets = [s["name"] for s in list_schedules()]
+
+    if not targets:
+        console.print("[muted]No schedules found.[/muted]")
+        return
+
+    deleted = 0
+    for n in targets:
+        log_out, log_err = _log_paths(n)
+        for lp in (log_out, log_err):
+            p = Path(lp)
+            if not p.exists():
+                continue
+            if cutoff is not None and p.stat().st_mtime > cutoff:
+                continue   # file is newer than threshold, skip
+            p.unlink()
+            console.print(f"[success]🗑  Deleted:[/success] {p.name}")
+            deleted += 1
+
+    if deleted == 0:
+        label = f"older than {older_than}" if days > 0 else "any"
+        console.print(f"[muted]No log files matched (threshold: {label}).[/muted]")
+    else:
+        console.print(f"[success]✅ Deleted {deleted} log file(s).[/success]")
+
+
 # ── direct-run fallback ───────────────────────────────────────────────────────
 
 def _run_direct(name: str, plist: Path) -> bool:

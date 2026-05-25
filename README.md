@@ -8,19 +8,19 @@
 
 Type `bee` and you're scanning. No config files, no accounts, no setup beyond one install command.
 
-Bumblebee CLI wraps the [Perplexity Bumblebee](https://github.com/perplexityai/bumblebee) scanner with a polished terminal interface — interactive REPL shell, auto-generated HTML/PDF reports, scheduled background scans via launchd, and a live threat intelligence catalog system.
+Bumblebee CLI wraps the [Perplexity Bumblebee](https://github.com/perplexityai/bumblebee) scanner with a polished terminal interface — interactive REPL shell, auto-generated HTML/PDF reports, SBOM generation, scheduled background scans via launchd, and a live threat intelligence catalog system.
 
 ---
 
 ## Installation
 
-### pip (recommended)
+### pip
 
 ```
 pip install bumblebee-cli
 ```
 
-Requires Python 3.11 or later. After installation, the `bee` command is available system-wide.
+Requires Python 3.11 or later. The `bee` command is available system-wide after install.
 
 ### Homebrew (macOS)
 
@@ -32,8 +32,8 @@ brew install bumblebee-cli
 ### From source
 
 ```
-git clone https://github.com/chanduchitikam/bumblebee-cli
-cd bumblebee-cli
+git clone https://github.com/Chandu00756/Bumblebee_CLI
+cd Bumblebee_CLI
 pip install .
 ```
 
@@ -45,19 +45,19 @@ pip install .
 bee
 ```
 
-No arguments opens the interactive guided menu. Use the arrow keys to navigate and press Enter to select.
+No arguments opens the interactive guided menu. Arrow keys to navigate, Enter to select.
 
 ---
 
-## Step 1 — Install the scanner
+## Step 1 — Install the scanner engine
 
-Before scanning, install the Perplexity Bumblebee binary. This requires [Go](https://go.dev/dl/) to be installed.
+Before scanning, install the Perplexity Bumblebee binary. Requires [Go](https://go.dev/dl/).
 
 ```
 bee install
 ```
 
-Verify it is working:
+Verify:
 
 ```
 bee selftest
@@ -73,40 +73,100 @@ bee selftest
 bee scan /path/to/project
 ```
 
-Scan a specific directory. Options:
-
 | Flag | Description |
 |---|---|
-| `--profile default` | Scan profile (default, strict, fast) |
+| `--profile baseline\|deep\|fast` | Scan depth (default: baseline) |
 | `--ecosystem npm` | Restrict to one or more ecosystems |
-| `--findings-only` | Print only packages with findings, suppress clean ones |
-| `--output results.ndjson` | Save raw NDJSON output to a file |
+| `--findings-only` | Suppress clean packages, show only findings |
+| `--output results.ndjson` | Save raw output to a file |
 | `--max-duration 120` | Timeout in seconds |
 | `--quiet` | Suppress progress output |
 
-Example — scan current directory, strict profile, findings only:
+```
+bee scan . --profile deep --findings-only
+```
+
+Quick scan — runs and saves a timestamped .ndjson file automatically:
 
 ```
-bee scan . --profile strict --findings-only
+bee quick .
 ```
 
 ---
 
 ### Reports
 
-Generate an HTML or PDF report from a saved scan file.
+Generate an HTML or PDF report from a saved scan file:
 
 ```
 bee report html results.ndjson
 bee report pdf  results.ndjson
 ```
 
-Reports are saved to `~/.bumblebee-cli/reports/`. Open the path printed in the terminal to view.
-
-Generate a report from the most recent scan automatically:
+Generate from the most recent scan:
 
 ```
-bee report last --format html
+bee report last
+bee report last --format pdf
+```
+
+Reports are saved to `~/.bumblebee-cli/reports/`.
+
+---
+
+### SBOM
+
+Generate a Software Bill of Materials:
+
+```
+bee sbom                        # SPDX format (default)
+bee sbom --format cyclonedx     # CycloneDX format
+bee sbom --output my-sbom.json  # Custom output path
+```
+
+---
+
+### Export
+
+Export scan results in different formats:
+
+```
+bee export --format sarif   # GitHub Code Scanning compatible
+bee export --format csv
+bee export --format json
+```
+
+---
+
+### CI / policy gate
+
+Use in CI pipelines — exits non-zero if findings exceed the threshold:
+
+```
+bee ci .                        # Fail on any critical finding
+bee ci . --fail-on high         # Fail on high or critical
+bee ci . --fail-on none         # Always pass (report only)
+```
+
+---
+
+### Diff
+
+Compare two scan files to see what changed:
+
+```
+bee diff scan-before.ndjson scan-after.ndjson
+```
+
+---
+
+### Threat scan
+
+Deep scan against known threat intel advisories:
+
+```
+bee threat-scan
+bee threat-scan my-catalog
 ```
 
 ---
@@ -115,16 +175,8 @@ bee report last --format html
 
 Bumblebee CLI uses macOS launchd to schedule recurring scans. No cron required.
 
-Add a daily scan of your home directory at 9 AM:
-
 ```
 bee schedule add morning-scan --when daily ~/
-```
-
-List all schedules:
-
-```
-bee schedule list
 ```
 
 Available `--when` presets:
@@ -144,29 +196,31 @@ Available `--when` presets:
 Manage schedules:
 
 ```
-bee schedule disable morning-scan
-bee schedule enable  morning-scan
-bee schedule run-now morning-scan
-bee schedule logs    morning-scan
-bee schedule remove  morning-scan
+bee schedule list
+bee schedule enable   <name>
+bee schedule disable  <name>
+bee schedule run      <name>          # trigger immediately
+bee schedule stop     <name>          # stop a running job
+bee schedule logs     <name>          # tail stdout log
+bee schedule delete-logs              # clear all log files
+bee schedule delete-logs <name> --older-than 1w   # 1w | 2w | 1m | 2m | 3m | 6m | all
+bee schedule remove   <name>
 ```
+
+Use `bee schedule setup` for an interactive wizard with preset scenarios (full machine scan, nightly deep scan, threat intel watch, etc.).
 
 ---
 
 ### Exposure catalogs
 
-Catalogs are JSON threat intelligence files that Bumblebee uses to match packages against known malicious indicators.
+Catalogs are JSON threat intelligence files used to match packages against known malicious indicators.
 
 ```
 bee catalog list
-bee catalog create my-catalog
-bee catalog show  my-catalog
-bee catalog validate my-catalog
-```
-
-Fetch a community threat intelligence feed:
-
-```
+bee catalog list-intel
+bee catalog show    <catalog>
+bee catalog create  <name>
+bee catalog validate <file>
 bee catalog fetch-intel
 ```
 
@@ -176,6 +230,8 @@ bee catalog fetch-intel
 
 ```
 bee history
+bee history show
+bee history last
 bee history clear
 ```
 
@@ -184,18 +240,38 @@ bee history clear
 ### Installer management
 
 ```
-bee install          # Install Bumblebee binary
-bee update           # Update to latest version
-bee uninstall        # Remove Bumblebee binary
-bee status           # Show installation status and version
-bee version          # Print bee version
+bee install        # Install Bumblebee scanner binary
+bee update         # Update to latest version
+bee status         # Show installation path and version
+bee selftest       # Run a quick sanity check
+bee version        # Print bee version
 ```
+
+---
+
+### Interactive mode
+
+```
+bee
+```
+
+Starts a REPL-style shell with guided menus for all commands. Useful for exploratory scanning without memorising flags.
+
+---
+
+## Watching for changes
+
+```
+bee watch /path/to/project
+```
+
+Monitors the directory for file changes and re-scans automatically.
 
 ---
 
 ## Directory layout
 
-All data is stored under `~/.bumblebee-cli/`:
+All data stored under `~/.bumblebee-cli/`:
 
 ```
 ~/.bumblebee-cli/
@@ -207,101 +283,11 @@ All data is stored under `~/.bumblebee-cli/`:
 
 ---
 
-## Publishing this package (how to put bee on PyPI)
-
-The steps below turn this project into a package anyone can install with `pip install bumblebee-cli`.
-
-### 1. Check PyPI for name availability
-
-Open https://pypi.org/search/?q=bumblebee-cli and confirm the name is not taken.
-
-### 2. Install build tools
-
-```
-pip install build twine
-```
-
-### 3. Build the distribution
-
-```
-cd bumblebee-cli
-python -m build
-```
-
-This creates two files in `dist/`:
-- `bumblebee_cli-1.1.0.tar.gz` — source distribution
-- `bumblebee_cli-1.1.0-py3-none-any.whl` — wheel
-
-### 4. Create a PyPI account
-
-Register at https://pypi.org/account/register/ and enable two-factor authentication.
-
-### 5. Create an API token
-
-Go to https://pypi.org/manage/account/token/ and create a token scoped to the project.
-
-### 6. Upload
-
-```
-twine upload dist/*
-```
-
-Enter `__token__` as the username and your API token as the password.
-
-After this, anyone can install your package:
-
-```
-pip install bumblebee-cli
-```
-
-And type `bee` to launch it.
-
-### 7. Publish to Homebrew (macOS)
-
-Create a GitHub repository named `homebrew-bumblebee`. Inside it, add a file named `bumblebee-cli.rb`:
-
-```ruby
-class BumblebeeCli < Formula
-  include Language::Python::Virtualenv
-
-  desc "Supply-chain security scanner CLI for macOS"
-  homepage "https://github.com/chanduchitikam/bumblebee-cli"
-  url "https://files.pythonhosted.org/packages/.../bumblebee_cli-1.1.0.tar.gz"
-  sha256 "REPLACE_WITH_SHA256_FROM_PyPI"
-  license "MIT"
-
-  depends_on "python@3.12"
-  depends_on "go" => :build
-
-  resource "rich" do
-    url "https://files.pythonhosted.org/packages/.../rich-13.7.0.tar.gz"
-    sha256 "..."
-  end
-
-  def install
-    virtualenv_install_with_resources
-  end
-
-  test do
-    system "#{bin}/bee", "version"
-  end
-end
-```
-
-Users then install with:
-
-```
-brew tap chanduchitikam/bumblebee
-brew install bumblebee-cli
-```
-
----
-
 ## Requirements
 
 - macOS 12 or later (Monterey+)
 - Python 3.11 or later
-- Go 1.21 or later (only needed for `bee install`)
+- Go 1.21 or later (required only for `bee install`)
 - Internet access for initial binary installation and threat intel feeds
 
 ---
@@ -313,102 +299,3 @@ MIT — see [LICENSE](LICENSE)
 ---
 
 🐝 Powered by [Perplexity Bumblebee](https://github.com/perplexityai/bumblebee)
-- **History** track every action you take
-- **Scheduler** set up recurring scan tasks
-- **Interactive mode** a REPL-style shell for exploratory use
-
-## Installation
-
-```bash
-pip install -e .
-```
-
-Or install dependencies directly:
-
-```bash
-pip install -r requirements.txt
-```
-
-## Usage
-
-```bash
-# Show help
-bbcli --help
-
-# Install a package
-bbcli install requests
-
-# Install a specific version
-bbcli install requests --version 2.28.0
-
-# Uninstall a package
-bbcli uninstall requests
-
-# List installed packages
-bbcli list
-
-# Scan a directory
-bbcli scan-cmd --target ./my-project
-
-# Generate a report
-bbcli report --format json --output report.json
-
-# Browse the catalog
-bbcli catalog
-
-# Show history
-bbcli history --limit 10
-
-# Start interactive mode
-bbcli interactive
-```
-
-## Development
-
-### Setup
-
-```bash
-git clone https://github.com/your-org/Bumblebee_CLI.git
-cd Bumblebee_CLI
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-pip install -e .
-```
-
-### Running Tests
-
-```bash
-pytest tests/ -v --cov=bbcli
-```
-
-## Project Structure
-
-```
-Bumblebee_CLI/
-├── bbcli/
-│   ├── __init__.py       # Package metadata
-│   ├── main.py           # CLI entry point (Click commands)
-│   ├── theme.py          # Rich console theme & helpers
-│   ├── installer.py      # Package install/uninstall logic
-│   ├── scanner.py        # Dependency & project scanner
-│   ├── scheduler.py      # Task scheduler
-│   ├── reporter.py       # Report generation (text/json/html)
-│   ├── catalog.py        # Curated package catalog
-│   ├── history.py        # Action history tracking
-│   └── interactive.py    # Interactive REPL mode
-├── tests/
-│   ├── __init__.py
-│   ├── test_installer.py
-│   ├── test_scanner.py
-│   ├── test_reporter.py
-│   ├── test_catalog.py
-│   └── test_history.py
-├── requirements.txt
-├── setup.py
-└── README.md
-```
-
-## License
-
-MIT

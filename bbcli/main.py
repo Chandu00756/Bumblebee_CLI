@@ -339,6 +339,20 @@ def schedule_logs(name: str = typer.Argument(...),
     """Tail the log output of a scheduled scan."""
     scheduler.show_logs(name, lines)
 
+@schedule_app.command("stop")
+def schedule_stop(name: str = typer.Argument(...)):
+    """⏹  Stop a currently-running scan job (schedule stays active)."""
+    scheduler.stop_schedule(name)
+
+@schedule_app.command("delete-logs")
+def schedule_delete_logs(
+    name:        Optional[str] = typer.Argument(None, help="Schedule name (omit to clean all schedules)"),
+    older_than:  str           = typer.Option("all", "--older-than", "-o",
+                                    help="Delete logs older than: 1w | 2w | 1m | 2m | 3m | 6m | all"),
+):
+    """🗑  Delete log files for a schedule, with optional age filter."""
+    scheduler.delete_logs(name, older_than)
+
 @schedule_app.command("setup")
 def schedule_setup():
     """Interactive wizard — pick a preset scheduling scenario."""
