@@ -5,8 +5,8 @@ with open("README.md", encoding="utf-8") as fh:
 
 setup(
     name="bumblebee-cli",
-    version="1.1.0",
-    description="Supply-chain security scanner CLI for macOS — wraps Perplexity Bumblebee with a polished terminal interface",
+    version="2.0.0",
+    description="Dependency security scanner for macOS — detects malicious, vulnerable, and suspicious packages across npm, PyPI, Go, Ruby and more",
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Chandu Chitikam",

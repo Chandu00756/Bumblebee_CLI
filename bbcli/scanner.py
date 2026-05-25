@@ -2,6 +2,47 @@
 import subprocess, shutil, json, os, tempfile, time
 from pathlib import Path
 from typing import Optional
+
+
+# ── .beeignore support ────────────────────────────────────────────────────────
+
+def _load_beeignore(root: str | None = None) -> set[str]:
+    """
+    Load ignore rules from .beeignore in root or cwd.
+    Each line: 'package', 'package@version', or 'ecosystem:package'.
+    Lines starting with # are comments.
+    """
+    search_dirs = []
+    if root:
+        search_dirs.append(Path(root))
+    search_dirs.append(Path.cwd())
+    search_dirs.append(Path.home() / ".bumblebee-cli")
+
+    rules: set[str] = set()
+    for d in search_dirs:
+        ignore_file = d / ".beeignore"
+        if ignore_file.exists():
+            for line in ignore_file.read_text().splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    rules.add(line.lower())
+            break  # use first .beeignore found
+    return rules
+
+
+def _is_ignored(finding: dict, rules: set[str]) -> bool:
+    """Return True if this finding matches any .beeignore rule."""
+    if not rules:
+        return False
+    name = (finding.get("package_name") or "").lower()
+    ver  = (finding.get("package_version") or "").lower()
+    eco  = (finding.get("ecosystem") or "").lower()
+    return (
+        name in rules
+        or f"{name}@{ver}" in rules
+        or f"{eco}:{name}" in rules
+        or f"{eco}:{name}@{ver}" in rules
+    )
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
 from rich.table import Table
 from rich.panel import Panel
@@ -33,6 +74,8 @@ def run_scan(profile, roots, ecosystems, exposure_catalog,
     if max_duration:
         cmd += ["--max-duration", max_duration]
     if dry_run:
+        from rich.panel import Panel
+        from rich import box
         console.print(Panel(
             f"[accent]Command:[/accent] {' '.join(cmd)}",
             title="[info]🔍 Dry Run[/info]", box=box.ROUNDED
@@ -40,8 +83,15 @@ def run_scan(profile, roots, ecosystems, exposure_catalog,
         return {}
     if not quiet:
         console.print(f"\n[primary]🐝 Starting {profile.upper()} scan…[/primary]")
+
+    # Load ignore rules from first .beeignore found in roots or cwd
+    ignore_rules = _load_beeignore(roots[0] if roots else None)
+    if ignore_rules:
+        console.print(f"  [dim].beeignore: {len(ignore_rules)} rule(s) active[/dim]")
+
     records, findings, diagnostics, summary = [], [], [], {}
     stdout_lines = []
+    ignored_count = 0
     start = time.time()
     with Progress(
         SpinnerColumn(spinner_name="dots12", style="primary"),
@@ -65,7 +115,10 @@ def run_scan(profile, roots, ecosystems, exposure_catalog,
                     records.append(rec)
                     prog.update(task, stats=f"pkgs={len(records)}")
                 elif rt == "finding":
-                    findings.append(rec)
+                    if _is_ignored(rec, ignore_rules):
+                        ignored_count += 1
+                    else:
+                        findings.append(rec)
                     prog.update(task, stats=f"pkgs={len(records)} [danger]findings={len(findings)}[/danger]")
                 elif rt == "scan_summary":
                     summary = rec
@@ -75,6 +128,8 @@ def run_scan(profile, roots, ecosystems, exposure_catalog,
                 pass
         proc.wait()
     Path(output_file).write_text("\n".join(stdout_lines) + "\n")
+    if ignored_count:
+        console.print(f"  [dim].beeignore suppressed {ignored_count} finding(s)[/dim]")
     return {
         "records": records, "findings": findings,
         "diagnostics": diagnostics, "summary": summary,

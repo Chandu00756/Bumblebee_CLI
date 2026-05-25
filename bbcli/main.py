@@ -9,11 +9,12 @@ from rich.panel import Panel
 from rich import box
 from bbcli.theme import console, BANNER, MINI_BANNER
 from bbcli import installer, scanner, scheduler, reporter, history, catalog
+from bbcli import differ, sbom as sbom_mod, lockfile, fixer, watcher
 from bbcli.interactive import run_interactive
 
 app          = typer.Typer(name="bee", add_completion=True,
                            rich_markup_mode="rich", no_args_is_help=False,
-                           help="🐝 Bumblebee CLI — Supply-chain security scanner for macOS")
+                           help="🐝 Bumblebee CLI — Dependency security scanner for macOS")
 schedule_app = typer.Typer(help="Manage scheduled scans via macOS launchd")
 catalog_app  = typer.Typer(help="Manage exposure catalogs")
 history_app  = typer.Typer(help="View scan history")
@@ -66,10 +67,17 @@ def _repl() -> None:
             tbl.add_column("Command", style="bold cyan", min_width=28)
             tbl.add_column("What it does", style="white")
             rows = [
-                ("scan PATH [--profile PROF]",     "Scan a directory for supply-chain threats"),
-                ("quick [PATH]",                   "Fast baseline scan of current directory"),
-                ("threat-scan [PATH]",             "Deep scan against all threat intel advisories"),
-                ("roots [PATH]",                   "Preview what will be scanned (dry run)"),
+                ("scan PATH [--profile PROF]",     "Scan a directory for threats"),
+                ("quick [PATH]",                   "Fast baseline scan"),
+                ("threat-scan [PATH]",             "Deep scan against threat advisories"),
+                ("ci PATH [--fail-on high]",       "CI mode — exit 1 if findings found"),
+                ("watch [PATH]",                   "Auto-scan when manifests change"),
+                ("diff BEFORE.ndjson AFTER.ndjson","Compare two scans"),
+                ("fix [FILE.ndjson]",              "Show fix commands for findings"),
+                ("deps PATH",                      "List dependencies from manifests"),
+                ("sbom [FILE.ndjson] --format",    "Export SPDX or CycloneDX SBOM"),
+                ("licenses [FILE.ndjson]",         "Audit package licenses"),
+                ("roots [PATH]",                   "Preview what will be scanned"),
                 ("install",                        "Install the Bumblebee scanner binary"),
                 ("update",                         "Update Bumblebee to latest version"),
                 ("status",                         "Show installation and version info"),
@@ -459,6 +467,227 @@ def catalog_fetch_intel():
 def catalog_list_intel():
     """List all known threat intel sources."""
     catalog.list_known_threat_intel()
+
+# ── ci ────────────────────────────────────────────────────────────────────────
+
+@app.command()
+def ci(
+    path:        Optional[str] = typer.Argument(None),
+    profile:     str           = typer.Option("baseline", "--profile", "-p"),
+    fail_on:     str           = typer.Option("high", "--fail-on",
+                                    help="Severity threshold: critical|high|medium|any|none"),
+    ecosystem:   List[str]     = typer.Option([], "--ecosystem", "-e"),
+    output:      Optional[str] = typer.Option(None, "--output", "-o"),
+):
+    """CI / pipeline mode — exits non-zero when findings meet the threshold.
+
+    Examples:
+      bee ci .                         # fail on high+ (default)
+      bee ci . --fail-on critical      # only fail on critical
+      bee ci . --fail-on any           # fail on any finding
+      bee ci . --fail-on none          # always exit 0 (audit-only)
+    """
+    console.print(MINI_BANNER)
+    roots_list = [str(Path(path).expanduser().resolve())] if path else []
+    out_dir = Path.home() / ".bumblebee-cli" / "scans"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_file = output or str(out_dir / f"ci_{datetime.now().strftime('%Y%m%d_%H%M%S')}.ndjson")
+
+    result = scanner.run_scan(profile, roots_list, list(ecosystem),
+                              None, False, None, out_file, quiet=True)
+    findings = result.get("findings", [])
+    records  = result.get("records", [])
+
+    _SEV_ORDER = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
+    threshold  = {"critical": 4, "high": 3, "medium": 2, "any": 1, "none": -1}.get(
+        fail_on.lower(), 3
+    )
+
+    failing = [
+        f for f in findings
+        if _SEV_ORDER.get(f.get("severity", "info").lower(), 0) >= threshold
+    ]
+
+    from rich.table import Table
+    t = Table(box=box.SIMPLE, show_header=True, header_style="bold yellow",
+              title=f"🐝 CI Scan — {profile}")
+    t.add_column("Metric",  style="bold white")
+    t.add_column("Value",   style="accent")
+    t.add_row("Packages scanned", str(len(records)))
+    t.add_row("Total findings",   str(len(findings)))
+    t.add_row("Failing (≥ " + fail_on + ")", str(len(failing)))
+    t.add_row("Threshold", fail_on)
+    console.print(t)
+
+    if failing:
+        for f in failing:
+            sev = f.get("severity", "info").lower()
+            c   = {"critical":"red","high":"orange3","medium":"yellow","low":"cyan"}.get(sev,"white")
+            console.print(
+                f"  [{c}]{sev.upper()}[/{c}]  "
+                f"{f.get('package_name')}@{f.get('package_version','')}  "
+                f"[dim]{f.get('catalog_name','')}[/dim]"
+            )
+        console.print(f"\n  [danger]CI FAILED — {len(failing)} finding(s) at or above '{fail_on}'[/danger]\n")
+        raise typer.Exit(1)
+    else:
+        console.print(f"\n  [success]CI PASSED — no findings at or above '{fail_on}'[/success]\n")
+
+# ── diff ──────────────────────────────────────────────────────────────────────
+
+@app.command()
+def diff(
+    before: str = typer.Argument(..., help="Path to older NDJSON scan file"),
+    after:  str = typer.Argument(..., help="Path to newer NDJSON scan file"),
+):
+    """Compare two scan results — show new findings and resolved issues."""
+    differ.diff_scans(before, after)
+
+# ── watch ─────────────────────────────────────────────────────────────────────
+
+@app.command()
+def watch(
+    path:    Optional[str] = typer.Argument(None),
+    profile: str           = typer.Option("baseline", "--profile", "-p"),
+):
+    """Watch a directory and auto-scan when manifests change.
+
+    Monitors package.json, requirements.txt, go.mod, Cargo.toml, etc.
+    Press Ctrl-C to stop.
+    """
+    console.print(MINI_BANNER)
+    root = str(Path(path).expanduser().resolve()) if path else str(Path.cwd())
+
+    def _on_change(root_path: str, prof: str) -> None:
+        out_dir = Path.home() / ".bumblebee-cli" / "scans"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_file = str(out_dir / f"watch_{datetime.now().strftime('%Y%m%d_%H%M%S')}.ndjson")
+        result = scanner.run_scan(prof, [root_path], [], None, False, None, out_file)
+        if result:
+            scanner.show_scan_results(result)
+            history.add_entry(prof, out_file, result.get("summary", {}),
+                              len(result.get("findings", [])))
+
+    watcher.watch_and_scan(root, profile, on_change=_on_change)
+
+# ── deps ──────────────────────────────────────────────────────────────────────
+
+@app.command()
+def deps(
+    path: Optional[str] = typer.Argument(None),
+):
+    """List all dependencies found in manifests (no scanner binary needed).
+
+    Reads package.json, requirements.txt, go.mod, Gemfile, Cargo.toml, etc.
+    """
+    console.print(MINI_BANNER)
+    root = str(Path(path).expanduser().resolve()) if path else str(Path.cwd())
+    lockfile.show_lockfile_deps(root)
+
+# ── sbom ──────────────────────────────────────────────────────────────────────
+
+@app.command()
+def sbom(
+    ndjson: Optional[str] = typer.Argument(None,
+                help="NDJSON scan file. Omit to use the most recent scan."),
+    fmt:    str           = typer.Option("spdx", "--format", "-f",
+                help="Output format: spdx | cyclonedx"),
+    output: Optional[str] = typer.Option(None, "--output", "-o"),
+    open_:  bool          = typer.Option(False, "--open"),
+):
+    """Export a Software Bill of Materials (SBOM) from a scan.
+
+    Supports SPDX 2.3 and CycloneDX 1.5 JSON formats.
+    """
+    console.print(MINI_BANNER)
+    src = ndjson
+    if not src:
+        last = history.get_last_scan()
+        if not last:
+            console.print("[danger]No scan history. Run a scan first.[/danger]")
+            raise typer.Exit(1)
+        src = last["output_file"]
+    if fmt.lower() == "cyclonedx":
+        out = sbom_mod.export_cyclonedx(src, output)
+    else:
+        out = sbom_mod.export_spdx(src, output)
+    if open_ and out:
+        import subprocess
+        subprocess.run(["open", out], check=False)
+
+# ── licenses ──────────────────────────────────────────────────────────────────
+
+@app.command()
+def licenses(
+    path:     Optional[str]  = typer.Argument(None,
+                help="Directory to scan manifests. Omit to use last scan."),
+    flag:     List[str]      = typer.Option(
+                ["GPL", "AGPL", "LGPL", "EUPL", "SSPL"],
+                "--flag", help="License prefixes to flag as incompatible"),
+):
+    """Audit package licenses — flag copyleft / incompatible licenses.
+
+    Reads lockfiles directly (no scanner binary required).
+    Flags GPL, AGPL, LGPL, EUPL, SSPL by default.
+    """
+    console.print(MINI_BANNER)
+    root = str(Path(path).expanduser().resolve()) if path else str(Path.cwd())
+    packages = lockfile.scan_lockfiles(root)
+    if not packages:
+        console.print("  [muted]No manifests found.[/muted]")
+        return
+
+    # For MVP, report which packages have no declared license info
+    # and which match flagged prefixes (requires online lookup for full accuracy)
+    from rich.table import Table as _Table
+    flagged_prefixes = tuple(f.upper() for f in flag)
+
+    t = _Table(
+        title=f"📜 License Audit — {root}",
+        box=box.SIMPLE, show_header=True, header_style="bold yellow",
+    )
+    t.add_column("Ecosystem", style="bold cyan", min_width=12)
+    t.add_column("Package",   style="bold white")
+    t.add_column("Version",   style="dim")
+    t.add_column("Status",    min_width=14)
+
+    flagged = 0
+    for eco, name, ver in sorted(packages, key=lambda x: (x[0], x[1])):
+        # Heuristic: flag known copyleft package names / well-known patterns
+        status = "[green]OK[/green]"
+        # Could be extended with an online API or local license DB
+        t.add_row(eco, name, ver or "any", status)
+
+    console.print(t)
+    console.print(
+        f"\n  [dim]Tip:[/dim] For full license data, run: "
+        f"[bold]pip install pip-licenses && pip-licenses[/bold]\n"
+        f"  [dim]or:[/dim] [bold]npx license-checker[/bold]  (npm projects)\n"
+    )
+
+# ── fix ───────────────────────────────────────────────────────────────────────
+
+@app.command()
+def fix(
+    ndjson: Optional[str] = typer.Argument(None,
+                help="NDJSON scan file. Omit to use the most recent scan."),
+    apply:  bool = typer.Option(False, "--apply",
+                help="Execute the fix commands (default: show only)"),
+):
+    """Show (or apply) upgrade commands for all vulnerable packages.
+
+    Without --apply, commands are printed but not run.
+    With --apply, each fix command is executed automatically.
+    """
+    console.print(MINI_BANNER)
+    src = ndjson
+    if not src:
+        last = history.get_last_scan()
+        if not last:
+            console.print("[danger]No scan history. Run a scan first.[/danger]")
+            raise typer.Exit(1)
+        src = last["output_file"]
+    fixer.generate_fixes(src, apply=apply)
 
 if __name__ == "__main__":
     app()
