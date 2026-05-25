@@ -1,8 +1,14 @@
 # 🐝 Bumblebee CLI
 
-A terminal-native supply-chain security scanner for macOS. Type `bee` and it opens. No configuration required to get started.
+[![PyPI version](https://badge.fury.io/py/bumblebee-cli.svg)](https://pypi.org/project/bumblebee-cli/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 
-Bumblebee CLI wraps the [Perplexity Bumblebee](https://github.com/perplexityai/bumblebee) binary with a polished interface — interactive menus, scheduled scans via launchd, HTML and PDF reports, and a threat catalog system.
+**Dependency security scanner for macOS.** Detects malicious, vulnerable, and suspicious packages across npm, PyPI, Go, Ruby, and more — right from your terminal.
+
+Type `bee` and you're scanning. No config files, no accounts, no setup beyond one install command.
+
+Bumblebee CLI wraps the [Perplexity Bumblebee](https://github.com/perplexityai/bumblebee) scanner with a polished terminal interface — interactive REPL shell, auto-generated HTML/PDF reports, scheduled background scans via launchd, and a live threat intelligence catalog system.
 
 ---
 
