@@ -4,6 +4,7 @@ from rich.console import Console
 from rich.text import Text
 from rich import box
 from rich.panel import Panel
+from bbcli import __version__ as _ver
 
 THEME = Theme({
     "primary":     "bold #FFD700",
@@ -41,12 +42,12 @@ BANNER = """[primary]
   ╚═════╝  ╚═════╝ ╚═╝     ╚═╝╚═════╝ ╚══════╝╚══════╝╚═════╝ ╚══════╝╚══════╝
 [/primary][accent]
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  🐝  Bumblebee CLI  •  Supply-Chain Security for macOS  •  v1.0.0      ║
+  ║  🐝  Bumblebee CLI  •  Supply-Chain Security for macOS  •  v{_ver}      ║
   ║  🔍  Powered by Perplexity Bumblebee  •  Read-only  •  Zero side fx    ║
   ╚══════════════════════════════════════════════════════════════════════════╝
 [/accent]"""
 
-MINI_BANNER = "[primary]🐝 Bumblebee CLI[/primary] [muted]v1.0.0 — Supply-Chain Security Scanner[/muted]"
+MINI_BANNER = f"[primary]🐝 Bumblebee CLI[/primary] [muted]v{_ver} — Dependency security scanner for macOS[/muted]"
 
 ECOSYSTEM_COLORS = {
     "npm":               "ecosystem.npm",
