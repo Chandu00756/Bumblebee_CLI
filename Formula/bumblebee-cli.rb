@@ -3,8 +3,8 @@ class BumblebeeCli < Formula
 
   desc "Dependency security scanner for macOS — detects malicious, vulnerable, and suspicious packages"
   homepage "https://github.com/Chandu00756/Bumblebee_CLI"
-  url "https://github.com/Chandu00756/Bumblebee_CLI/archive/refs/tags/v2.1.1.tar.gz"
-  sha256 "572512d6459510fff0eca929b0d22765b4e36274126a14887de141ff8cf7eed7"
+  url "https://github.com/Chandu00756/Bumblebee_CLI/archive/refs/tags/v2.1.2.tar.gz"
+  sha256 "16b9b25d4de50a32980bf75dd9df35b038c56fa88a865ec4fe2505ea23e135f7"
   license "MIT"
 
   depends_on "python@3.13"
