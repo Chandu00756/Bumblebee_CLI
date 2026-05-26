@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bumblebee-cli"
-version = "2.1.1"
+version = "2.1.2"
 description = "Dependency security scanner for macOS — detects malicious, vulnerable, and suspicious packages across npm, PyPI, Go, Ruby and more"
 readme = "README.md"
 license = { text = "MIT" }
@@ -34,9 +34,9 @@ dependencies = [
 bee = "bbcli.main:app"
 
 [project.urls]
-Homepage = "https://github.com/chanduchitikam/bumblebee-cli"
-"Bug Tracker" = "https://github.com/chanduchitikam/bumblebee-cli/issues"
-Source = "https://github.com/chanduchitikam/bumblebee-cli"
+Homepage = "https://github.com/Chandu00756/Bumblebee_CLI"
+"Bug Tracker" = "https://github.com/Chandu00756/Bumblebee_CLI/issues"
+Source = "https://github.com/Chandu00756/Bumblebee_CLI"
 
 [tool.setuptools.packages.find]
 where = ["."]

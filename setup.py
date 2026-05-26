@@ -5,13 +5,13 @@ with open("README.md", encoding="utf-8") as fh:
 
 setup(
     name="bumblebee-cli",
-    version="2.1.1",
+    version="2.1.2",
     description="Dependency security scanner for macOS — detects malicious, vulnerable, and suspicious packages across npm, PyPI, Go, Ruby and more",
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Chandu Chitikam",
     author_email="",
-    url="https://github.com/chanduchitikam/bumblebee-cli",
+    url="https://github.com/Chandu00756/Bumblebee_CLI",
     license="MIT",
     packages=find_packages(),
     install_requires=[
@@ -37,7 +37,7 @@ setup(
     ],
     keywords=["security", "supply-chain", "scanner", "bumblebee", "cli", "sbom"],
     project_urls={
-        "Bug Tracker": "https://github.com/chanduchitikam/bumblebee-cli/issues",
-        "Source": "https://github.com/chanduchitikam/bumblebee-cli",
+        "Bug Tracker": "https://github.com/Chandu00756/Bumblebee_CLI/issues",
+        "Source": "https://github.com/Chandu00756/Bumblebee_CLI",
     },
 )
